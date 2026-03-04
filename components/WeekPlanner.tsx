@@ -300,7 +300,7 @@ export function WeekPlanner({ numDays, profile }: Props) {
         {/* Complexity */}
         <div>
           <div className="flex items-center justify-between text-xs font-semibold text-gray-400 mb-2">
-            <span>⚡ Quick &amp; Easy</span><span>👨‍🍳 Elaborate</span>
+            <span>⚡ 5 min</span><span>60+ min 👨‍🍳</span>
           </div>
           <input
             type="range" min={0} max={100} value={complexity}

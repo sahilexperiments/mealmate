@@ -141,7 +141,7 @@ export function MealSliderCard({
 
           {/* Complexity */}
           <div className="flex items-center gap-2">
-            <span className="text-base leading-none" title="Easy">⚡</span>
+            <span className="text-xs font-semibold text-gray-400 whitespace-nowrap">5 min</span>
             <input
               type="range"
               min={0}
@@ -153,7 +153,7 @@ export function MealSliderCard({
                 background: `linear-gradient(to right, ${config.accent} 0%, ${config.accent} ${complexity}%, #E5E7EB ${complexity}%, #E5E7EB 100%)`,
               }}
             />
-            <span className="text-base leading-none" title="Cumbersome">👨‍🍳</span>
+            <span className="text-xs font-semibold text-gray-400 whitespace-nowrap">60+ min</span>
           </div>
 
           {/* Custom notes */}
