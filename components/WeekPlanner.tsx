@@ -77,6 +77,7 @@ async function generateOneMeal(
   lessOfThese: string[],
   moreOfThese: string[],
   recentMeals: string[],
+  customDishes: import('@/types/meal').CustomDish[],
 ): Promise<MealSuggestion> {
   const res = await fetch('/api/generate-meal', {
     method: 'POST',
@@ -84,7 +85,7 @@ async function generateOneMeal(
     body: JSON.stringify({
       mealType, healthLevel: health, complexityLevel: complexity,
       dietType, cookLanguage, servings, allergens, gutFriendly,
-      myMealPool, lessOfThese, moreOfThese, recentMeals,
+      myMealPool, lessOfThese, moreOfThese, recentMeals, customDishes,
     }),
   });
   if (!res.ok) {
@@ -256,6 +257,7 @@ export function WeekPlanner({ numDays, profile }: Props) {
             getLessOfThese(),
             [...getMoreOfThese(), ...getLikedMeals()],
             getRecentMeals(mt),
+            profile.customDishes ?? [],
           );
           addRecentMeal(mt, meal.name);
           results[d][mt] = meal;

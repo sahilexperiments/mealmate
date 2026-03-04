@@ -20,6 +20,13 @@ export interface MealPreferences {
   dietType: MealDietType;
 }
 
+export interface CustomDish {
+  id: string;
+  name: string;
+  description: string;
+  feedback: 'like' | 'more' | 'less' | null;
+}
+
 export interface UserProfile {
   dietType: DietType;
   cookLanguage: CookLanguage;
@@ -27,7 +34,8 @@ export interface UserProfile {
   allergens: string[];
   gutFriendly: boolean;
   onboardingComplete: boolean;
-  myMeals: string[];   // user's own meal pool
+  myMeals: string[];        // legacy meal pool
+  customDishes: CustomDish[]; // rich custom dish pool with descriptions + feedback
 }
 
 export interface Ingredient {

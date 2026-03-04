@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Sparkles, Save, Check, Settings, X, History, Loader2 } from 'lucide-react';
+import { Sparkles, Save, Check, Settings, X, History, Loader2, User } from 'lucide-react';
 import Link from 'next/link';
 import { MealSliderCard } from './MealSliderCard';
 import { MealSuggestionCard } from './MealSuggestionCard';
@@ -107,6 +107,7 @@ const DEFAULT_PROFILE: UserProfile = {
   gutFriendly: false,
   onboardingComplete: false,
   myMeals: [],
+  customDishes: [],
 };
 
 const ALLERGEN_OPTIONS = [
@@ -205,6 +206,7 @@ export function MealPlanner() {
             customNotes:  customNotes[mealType] || undefined,
             myMealPool:   profile.myMeals ?? [],
             moreOfThese:  [...getMoreOfThese(), ...getLikedMeals()],
+            customDishes: profile.customDishes ?? [],
           }),
         });
 
@@ -329,6 +331,13 @@ export function MealPlanner() {
             >
               <History className="w-3.5 h-3.5" />
               History
+            </Link>
+            <Link
+              href="/profile"
+              className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <User className="w-3.5 h-3.5" />
+              Profile
             </Link>
             <button
               onClick={() => setShowSettings((p) => !p)}
@@ -524,29 +533,6 @@ export function MealPlanner() {
       {/* ── MAIN CONTENT ─────────────────────────────────────────────────── */}
       <main className="max-w-2xl mx-auto px-4 pt-4 pb-6 space-y-3">
 
-        {/* Servings row (always visible) */}
-        <div className="flex justify-end">
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-1.5">
-            <span className="text-xs text-gray-400 font-medium">🍽️</span>
-            <button
-              onClick={() => setProfile((p) => ({ ...p, servings: Math.max(1, p.servings - 1) }))}
-              className="w-5 h-5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-sm flex items-center justify-center transition-colors leading-none"
-            >
-              −
-            </button>
-            <span className="text-sm font-black text-gray-800 w-4 text-center tabular-nums">{profile.servings}</span>
-            <button
-              onClick={() => setProfile((p) => ({ ...p, servings: Math.min(8, p.servings + 1) }))}
-              className="w-5 h-5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-sm flex items-center justify-center transition-colors leading-none"
-            >
-              +
-            </button>
-            <span className="text-xs text-gray-400 font-medium">
-              {profile.servings === 1 ? 'serving' : 'servings'}
-            </span>
-          </div>
-        </div>
-
         {/* ── WEEK / FORTNIGHT MODE ──────────────────────────────────────────── */}
         {planMode !== 'today' && (
           <WeekPlanner
@@ -569,11 +555,15 @@ export function MealPlanner() {
                   dietType={preferences[mt].dietType}
                   skipped={skipped[mt]}
                   customNotes={customNotes[mt]}
+                  servings={profile.servings}
+                  customDishes={profile.customDishes ?? []}
                   onHealthChange={(v) => updatePref(mt, 'health', v)}
                   onComplexityChange={(v) => updatePref(mt, 'complexity', v)}
                   onDietTypeChange={(d) => updateMealDiet(mt, d)}
                   onSkipToggle={() => toggleSkip(mt)}
                   onCustomNotesChange={(v) => setCustomNotes((n) => ({ ...n, [mt]: v }))}
+                  onServingsChange={(v) => setProfile((p) => ({ ...p, servings: v }))}
+                  onCustomDishesChange={(dishes) => setProfile((p) => ({ ...p, customDishes: dishes }))}
                 />
               ))}
             </div>

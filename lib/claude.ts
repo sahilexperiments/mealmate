@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { MealType, DietType, CookLanguage, MealSuggestion } from '@/types/meal';
+import type { MealType, DietType, CookLanguage, MealSuggestion, CustomDish } from '@/types/meal';
 
 const DIET_DESCRIPTIONS: Record<DietType, string> = {
   vegetarian: 'strictly vegetarian (no meat, poultry, fish, or eggs)',
@@ -34,10 +34,11 @@ export async function generateMealSuggestion(params: {
   customNotes?: string;
   myMealPool?: string[];
   moreOfThese?: string[];
+  customDishes?: CustomDish[];
 }): Promise<MealSuggestion> {
   const { mealType, healthLevel, complexityLevel, dietType, cookLanguage, servings,
     previousMealName, allergens, gutFriendly, lessOfThese,
-    recentMeals, customNotes, myMealPool, moreOfThese } = params;
+    recentMeals, customNotes, myMealPool, moreOfThese, customDishes } = params;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured. Add it to .env.local');
@@ -80,7 +81,16 @@ export async function generateMealSuggestion(params: {
     ? `\nUSER REQUEST for this ${mealType}: "${customNotes.trim()}". Incorporate this as best you can while respecting all other constraints.\n`
     : '';
 
-  const myMealPoolClause = myMealPool && myMealPool.length > 0
+  const customDishesClause = customDishes && customDishes.length > 0
+    ? `\nUSER CUSTOM DISH LIST: The user has added these personal dishes to their list. Recommend these intermittently (roughly 1 in every 3-4 suggestions), giving priority to those marked as liked/more:\n${
+        customDishes.map((d) => {
+          const tag = d.feedback === 'like' || d.feedback === 'more' ? ' ★ USER LOVES THIS' : d.feedback === 'less' ? ' (suggest rarely)' : '';
+          return `- "${d.name}"${d.description ? `: ${d.description}` : ''}${tag}`;
+        }).join('\n')
+      }\n`
+    : '';
+
+  const myMealPoolClause = !customDishesClause && myMealPool && myMealPool.length > 0
     ? `\nUSER FAVOURITES: The user enjoys cooking/eating these dishes: ${myMealPool.join(', ')}. When suitable and not recently suggested, you may recommend one of these or a closely inspired dish.\n`
     : '';
 
@@ -95,7 +105,7 @@ Generate a ${mealType} meal suggestion with these parameters:
 - Health preference: ${healthDesc}
 - Complexity preference: ${complexityDesc}
 - Number of servings: ${servings}
-${avoidClause}${allergenClause}${gutClause}${lessClause}${recentClause}${customNotesClause}${myMealPoolClause}${moreClause}
+${avoidClause}${allergenClause}${gutClause}${lessClause}${recentClause}${customNotesClause}${customDishesClause}${myMealPoolClause}${moreClause}
 Requirements:
 1. Use ingredients easily available in Indian supermarkets and apps (BigBasket, Blinkit, Swiggy Instamart, Nature's Basket, D-Mart).
 2. Where relevant, recommend clean-label or organic brands available in India: Organic India, True Elements, 24 Mantra Organic, Tata Organic, Slurrp Farm, Farmley, The Whole Truth, Epigamia, Wingreens, Pristine, DiSano.

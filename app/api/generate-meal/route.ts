@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateMealSuggestion } from '@/lib/claude';
-import type { MealType, DietType, CookLanguage } from '@/types/meal';
+import type { MealType, DietType, CookLanguage, CustomDish } from '@/types/meal';
 
 export async function POST(request: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
   const { mealType, healthLevel, complexityLevel, dietType, cookLanguage, servings,
     previousMealName, allergens, gutFriendly, lessOfThese,
-    recentMeals, customNotes, myMealPool, moreOfThese } = body;
+    recentMeals, customNotes, myMealPool, moreOfThese, customDishes } = body;
 
   if (!mealType || healthLevel == null || complexityLevel == null) {
     return NextResponse.json(
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
       customNotes:  typeof customNotes === 'string' ? customNotes : undefined,
       myMealPool:   Array.isArray(myMealPool)   ? (myMealPool   as string[]) : [],
       moreOfThese:  Array.isArray(moreOfThese)  ? (moreOfThese  as string[]) : [],
+      customDishes: Array.isArray(customDishes) ? (customDishes as CustomDish[]) : [],
     });
 
     return NextResponse.json(suggestion);
