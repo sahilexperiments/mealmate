@@ -1,0 +1,476 @@
+'use client';
+
+import { useState, useCallback, useEffect } from 'react';
+import { Sparkles, Save, Check, Settings, X, History, Loader2, ChevronLeft } from 'lucide-react';
+import Link from 'next/link';
+import { MealSliderCard } from './MealSliderCard';
+import { MealSuggestionCard } from './MealSuggestionCard';
+import type {
+  MealType,
+  DietType,
+  CookLanguage,
+  MealSuggestion,
+  PlanPreferences,
+  UserProfile,
+} from '@/types/meal';
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function getUserId(): string {
+  if (typeof window === 'undefined') return '';
+  let id = localStorage.getItem('mealmate-user-id');
+  if (!id) {
+    id = `u-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    localStorage.setItem('mealmate-user-id', id);
+  }
+  return id;
+}
+
+function getTomorrow(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().split('T')[0];
+}
+
+function formatDisplayDate(isoDate: string): string {
+  const [y, m, day] = isoDate.split('-').map(Number);
+  const d = new Date(y, m - 1, day);
+  const today = new Date();
+  const tomorrow = new Date();
+  tomorrow.setDate(today.getDate() + 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+  return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+// ─── constants ──────────────────────────────────────────────────────────────
+
+const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner'];
+
+const DEFAULT_PREFS: PlanPreferences = {
+  breakfast: { health: 25, complexity: 20 },
+  lunch: { health: 50, complexity: 45 },
+  dinner: { health: 50, complexity: 50 },
+};
+
+const DEFAULT_PROFILE: UserProfile = {
+  dietType: 'vegetarian',
+  cookLanguage: 'hindi',
+  servings: 2,
+};
+
+const DIET_LABELS: Record<DietType, string> = {
+  vegetarian: '🥦 Vegetarian',
+  'non-vegetarian': '🍗 Non-Veg',
+  eggetarian: '🥚 Eggetarian',
+  jain: '🙏 Jain',
+};
+
+const LANG_LABELS: Record<CookLanguage, string> = {
+  english: 'English',
+  hindi: 'हिंदी',
+  tamil: 'Tamil',
+  telugu: 'Telugu',
+  kannada: 'Kannada',
+  marathi: 'Marathi',
+  bengali: 'Bengali',
+  gujarati: 'Gujarati',
+};
+
+// ─── types ───────────────────────────────────────────────────────────────────
+
+type SuggestionState = MealSuggestion | null | 'loading';
+
+// ─── component ───────────────────────────────────────────────────────────────
+
+export function MealPlanner() {
+  const [preferences, setPreferences] = useState<PlanPreferences>(DEFAULT_PREFS);
+  const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
+  const [date, setDate] = useState<string>(getTomorrow);
+  const [suggestions, setSuggestions] = useState<Record<MealType, SuggestionState>>({
+    breakfast: null,
+    lunch: null,
+    dinner: null,
+  });
+  const [showSettings, setShowSettings] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [hasGenerated, setHasGenerated] = useState(false);
+
+  // Load profile from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('mealmate-profile');
+    if (saved) {
+      try {
+        setProfile(JSON.parse(saved));
+      } catch { /* ignore */ }
+    }
+  }, []);
+
+  // Persist profile to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('mealmate-profile', JSON.stringify(profile));
+  }, [profile]);
+
+  // ── generate a single meal ───────────────────────────────────────────────
+
+  const generateMeal = useCallback(
+    async (mealType: MealType, previousMealName?: string) => {
+      setError(null);
+      setSuggestions((prev) => ({ ...prev, [mealType]: 'loading' }));
+
+      try {
+        const res = await fetch('/api/generate-meal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mealType,
+            healthLevel: preferences[mealType].health,
+            complexityLevel: preferences[mealType].complexity,
+            dietType: profile.dietType,
+            cookLanguage: profile.cookLanguage,
+            servings: profile.servings,
+            previousMealName,
+          }),
+        });
+
+        if (!res.ok) {
+          const { error: msg } = await res.json();
+          throw new Error(msg || 'Failed to generate meal');
+        }
+
+        const suggestion: MealSuggestion = await res.json();
+        setSuggestions((prev) => ({ ...prev, [mealType]: suggestion }));
+      } catch (err) {
+        console.error(err);
+        setSuggestions((prev) => ({ ...prev, [mealType]: null }));
+        setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      }
+    },
+    [preferences, profile],
+  );
+
+  // ── generate all three meals in parallel ────────────────────────────────
+
+  const generateAll = useCallback(() => {
+    setHasGenerated(true);
+    setSavedId(null);
+    MEAL_TYPES.forEach((mt) => generateMeal(mt));
+  }, [generateMeal]);
+
+  // ── regenerate one meal ──────────────────────────────────────────────────
+
+  const handleNewSuggestion = useCallback(
+    (mealType: MealType) => {
+      const cur = suggestions[mealType];
+      const prev = cur && cur !== 'loading' ? cur.name : undefined;
+      generateMeal(mealType, prev);
+    },
+    [generateMeal, suggestions],
+  );
+
+  // ── save plan ────────────────────────────────────────────────────────────
+
+  const handleSave = useCallback(async () => {
+    const allReady = MEAL_TYPES.every((mt) => {
+      const s = suggestions[mt];
+      return s && s !== 'loading';
+    });
+    if (!allReady) return;
+
+    setSaving(true);
+    try {
+      const res = await fetch('/api/meal-plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-user-id': getUserId() },
+        body: JSON.stringify({
+          date,
+          breakfast: suggestions.breakfast,
+          lunch: suggestions.lunch,
+          dinner: suggestions.dinner,
+          preferences,
+        }),
+      });
+      const plan = await res.json();
+      setSavedId(plan.id);
+    } catch (err) {
+      console.error('Save failed', err);
+    } finally {
+      setSaving(false);
+    }
+  }, [date, suggestions, preferences]);
+
+  // ── derived state ────────────────────────────────────────────────────────
+
+  const anyLoading = MEAL_TYPES.some((mt) => suggestions[mt] === 'loading');
+  const allReady = MEAL_TYPES.every((mt) => {
+    const s = suggestions[mt];
+    return s && s !== 'loading';
+  });
+
+  const updatePref = (meal: MealType, key: keyof (typeof preferences)[MealType], value: number) => {
+    setPreferences((p) => ({ ...p, [meal]: { ...p[meal], [key]: value } }));
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="min-h-screen bg-cream">
+      {/* ── TOP NAV ───────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-30 bg-cream/80 backdrop-blur-md border-b border-orange-100">
+        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl leading-none">🍛</span>
+            <span className="text-xl font-black text-gray-900 tracking-tight">MealMate</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/history"
+              className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <History className="w-3.5 h-3.5" />
+              History
+            </Link>
+            <button
+              onClick={() => setShowSettings((p) => !p)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Settings
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── SETTINGS PANEL ───────────────────────────────────────────────── */}
+      {showSettings && (
+        <div className="max-w-2xl mx-auto px-4 pt-4 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 relative">
+            <button
+              onClick={() => setShowSettings(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <h2 className="text-sm font-black text-gray-700 uppercase tracking-widest mb-4">Preferences</h2>
+            <div className="space-y-4">
+              {/* Diet type */}
+              <div>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-2">Diet</label>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(DIET_LABELS) as DietType[]).map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setProfile((p) => ({ ...p, dietType: d }))}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
+                        profile.dietType === d
+                          ? 'bg-saffron text-white border-saffron'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-saffron'
+                      }`}
+                    >
+                      {DIET_LABELS[d]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cook language */}
+              <div>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-2">
+                  Cook&apos;s Language
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(LANG_LABELS) as CookLanguage[]).map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => setProfile((p) => ({ ...p, cookLanguage: l }))}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
+                        profile.cookLanguage === l
+                          ? 'bg-indigo-500 text-white border-indigo-500'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-400'
+                      }`}
+                    >
+                      {LANG_LABELS[l]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Servings */}
+              <div>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-2">
+                  Servings
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setProfile((p) => ({ ...p, servings: Math.max(1, p.servings - 1) }))}
+                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-lg flex items-center justify-center transition-colors"
+                  >
+                    −
+                  </button>
+                  <span className="text-xl font-black text-gray-800 w-6 text-center">{profile.servings}</span>
+                  <button
+                    onClick={() => setProfile((p) => ({ ...p, servings: Math.min(8, p.servings + 1) }))}
+                    className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-lg flex items-center justify-center transition-colors"
+                  >
+                    +
+                  </button>
+                  <span className="text-sm text-gray-400">people</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MAIN CONTENT ─────────────────────────────────────────────────── */}
+      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+        {/* Hero */}
+        {!hasGenerated && (
+          <div className="text-center pt-2 pb-4 animate-fade-in">
+            <h1 className="text-3xl font-black text-gray-900 tracking-tight">
+              What&apos;s on the menu?
+            </h1>
+            <p className="text-gray-500 mt-1.5 text-sm">
+              Set your vibe, hit generate — we&apos;ll handle the rest.
+            </p>
+          </div>
+        )}
+
+        {/* Date selector */}
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-bold text-gray-500">Plan for</span>
+          <div className="relative">
+            <span className="absolute inset-y-0 left-3 flex items-center text-base pointer-events-none">📅</span>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => {
+                setDate(e.target.value);
+                setSavedId(null);
+              }}
+              min={new Date().toISOString().split('T')[0]}
+              className="pl-9 pr-3 py-2 text-sm font-bold text-gray-800 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-saffron/40 cursor-pointer"
+            />
+          </div>
+          <span className="text-sm font-semibold text-saffron">{formatDisplayDate(date)}</span>
+        </div>
+
+        {/* Slider cards */}
+        <div className="space-y-4">
+          {MEAL_TYPES.map((mt) => (
+            <MealSliderCard
+              key={mt}
+              mealType={mt}
+              health={preferences[mt].health}
+              complexity={preferences[mt].complexity}
+              onHealthChange={(v) => updatePref(mt, 'health', v)}
+              onComplexityChange={(v) => updatePref(mt, 'complexity', v)}
+            />
+          ))}
+        </div>
+
+        {/* Error message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-medium flex items-start gap-2 animate-fade-in">
+            <span>⚠️</span>
+            <span>{error}</span>
+          </div>
+        )}
+
+        {/* Generate button */}
+        <button
+          onClick={generateAll}
+          disabled={anyLoading}
+          className="w-full flex items-center justify-center gap-2 bg-saffron hover:bg-orange-600 disabled:bg-orange-300 text-white font-black text-base py-4 rounded-2xl shadow-md shadow-orange-200 transition-all duration-200 disabled:cursor-not-allowed active:scale-[0.98]"
+        >
+          {anyLoading ? (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Thinking up your meals…
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-5 h-5" />
+              {hasGenerated ? 'Regenerate All' : 'Generate My Meal Plan'}
+            </>
+          )}
+        </button>
+
+        {/* Profile quick-view chips */}
+        <div className="flex flex-wrap items-center gap-2 justify-center text-xs text-gray-400">
+          <span className="font-semibold">{DIET_LABELS[profile.dietType]}</span>
+          <span>·</span>
+          <span>{profile.servings} serving{profile.servings !== 1 ? 's' : ''}</span>
+          <span>·</span>
+          <span>Cook speaks {LANG_LABELS[profile.cookLanguage]}</span>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="text-saffron font-semibold hover:underline"
+          >
+            Change
+          </button>
+        </div>
+
+        {/* ── RESULTS ─────────────────────────────────────────────────────── */}
+        {hasGenerated && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-gray-800">
+                Your Plan for {formatDisplayDate(date)}
+              </h2>
+              {allReady && (
+                <button
+                  onClick={handleSave}
+                  disabled={saving || !!savedId}
+                  className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl transition-all ${
+                    savedId
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-gray-900 text-white hover:bg-gray-700'
+                  } disabled:opacity-60`}
+                >
+                  {saving ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : savedId ? (
+                    <Check className="w-3.5 h-3.5" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  {savedId ? 'Saved!' : 'Save Plan'}
+                </button>
+              )}
+            </div>
+
+            {MEAL_TYPES.map((mt) => {
+              const s = suggestions[mt];
+              if (s === 'loading') {
+                return (
+                  <div key={mt} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 flex flex-col items-center gap-3 animate-pulse-slow">
+                    <Loader2 className="w-6 h-6 text-saffron animate-spin" />
+                    <p className="text-sm text-gray-400 font-medium">
+                      Thinking about your {mt}…
+                    </p>
+                  </div>
+                );
+              }
+              if (!s) return null;
+              return (
+                <MealSuggestionCard
+                  key={s.id}
+                  suggestion={s}
+                  mealType={mt}
+                  cookLanguage={profile.cookLanguage}
+                  onNewSuggestion={() => handleNewSuggestion(mt)}
+                  isRegenerating={false}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        <div className="pb-8" />
+      </main>
+    </div>
+  );
+}

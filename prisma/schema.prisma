@@ -1,0 +1,23 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model MealPlan {
+  id          String   @id @default(uuid())
+  userId      String
+  date        String
+  breakfast   String?  // JSON serialised MealSuggestion
+  lunch       String?
+  dinner      String?
+  preferences String?  // JSON serialised PlanPreferences
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId])
+}
