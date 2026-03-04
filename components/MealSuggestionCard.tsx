@@ -190,6 +190,32 @@ export function MealSuggestionCard({ suggestion, mealType, cookLanguage, onNewSu
                         {ing.brandRecommendation}
                       </p>
                     )}
+                    <div className="flex gap-1 mt-1.5">
+                      <a
+                        href={`https://blinkit.com/s/?q=${encodeURIComponent(ing.name)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#F4F600] text-[#1a1a1a] hover:opacity-75 transition-opacity"
+                      >
+                        Blinkit
+                      </a>
+                      <a
+                        href={`https://www.zeptonow.com/search?query=${encodeURIComponent(ing.name)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-600 text-white hover:opacity-75 transition-opacity"
+                      >
+                        Zepto
+                      </a>
+                      <a
+                        href={`https://www.swiggy.com/instamart/search?query=${encodeURIComponent(ing.name)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#FC8019] text-white hover:opacity-75 transition-opacity"
+                      >
+                        Swiggy
+                      </a>
+                    </div>
                   </div>
                   <div className="text-right ml-3 shrink-0">
                     <p className="text-sm font-bold text-gray-800">₹{ing.estimatedCostInr}</p>
