@@ -15,6 +15,65 @@ import type {
   UserProfile,
 } from '@/types/meal';
 
+// ─── loading messages ────────────────────────────────────────────────────────
+
+const LOADING_MESSAGES = [
+  { emoji: '🍳', text: 'Whipping up delicious meal ideas' },
+  { emoji: '🤤', text: 'Thinking of mouth-watering meals' },
+  { emoji: '🙏', text: 'Pehle Pet-Pooja, baad mein sab dooja' },
+  { emoji: '🧿', text: 'Consulting the kitchen gods' },
+  { emoji: '🌶️', text: 'Asking the masala what it wants to be' },
+  { emoji: '✨', text: 'Your hunger is valid, hold on' },
+  { emoji: '🗺️', text: 'Summoning flavours from across India' },
+  { emoji: '🍲', text: "Making sure the dal isn't too thin" },
+  { emoji: '🔥', text: 'Spice levels under negotiation' },
+  { emoji: '🧂', text: 'Just seasoning the data' },
+  { emoji: '🥦', text: "Checking what's fresh at the sabzi mandi" },
+  { emoji: '🤔', text: 'The chef is in deep thought' },
+  { emoji: '⚖️', text: 'Balancing macros and masalas' },
+  { emoji: '🫶', text: 'Finding the dish your tummy deserves' },
+  { emoji: '🤌', text: 'Khana is coming, promise' },
+  { emoji: '🔍', text: "So you don't have to Google what to eat" },
+  { emoji: '🤖', text: 'Teaching Claude to cook' },
+  { emoji: '🎯', text: 'Plotting the perfect plate' },
+  { emoji: '😇', text: 'Flavours incoming, patience loading' },
+  { emoji: '⏳', text: 'Unlike your hunger, good food takes time' },
+];
+
+function LoadingCard({ mealType }: { mealType: MealType }) {
+  const [idx, setIdx] = useState(() => Math.floor(Math.random() * LOADING_MESSAGES.length));
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIdx((i) => (i + 1) % LOADING_MESSAGES.length);
+        setVisible(true);
+      }, 350);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const { emoji, text } = LOADING_MESSAGES[idx];
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 flex flex-col items-center gap-2 min-h-[130px] justify-center">
+      <span
+        className={`text-4xl transition-all duration-300 ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}
+      >
+        {emoji}
+      </span>
+      <p
+        className={`text-sm text-gray-500 font-medium text-center max-w-[220px] transition-all duration-300 ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
+      >
+        {text}…
+      </p>
+      <p className="text-xs text-gray-300 font-medium capitalize mt-1">{mealType} on its way</p>
+    </div>
+  );
+}
+
 // ─── helpers ────────────────────────────────────────────────────────────────
 
 function getUserId(): string {
@@ -152,12 +211,21 @@ export function MealPlanner() {
     [preferences, profile],
   );
 
-  // ── generate all active (non-skipped) meals in parallel ─────────────────
+  // ── generate active meals sequentially: breakfast → lunch → dinner ────────
 
-  const generateAll = useCallback(() => {
+  const generateAll = useCallback(async () => {
     setHasGenerated(true);
     setSavedId(null);
-    MEAL_TYPES.filter((mt) => !skipped[mt]).forEach((mt) => generateMeal(mt));
+    const active = MEAL_TYPES.filter((mt) => !skipped[mt]);
+    // Mark all active as loading upfront so the button stays disabled throughout
+    setSuggestions((prev) => {
+      const next = { ...prev };
+      active.forEach((mt) => { next[mt] = 'loading'; });
+      return next;
+    });
+    for (const mt of active) {
+      await generateMeal(mt);
+    }
   }, [generateMeal, skipped]);
 
   // ── regenerate one meal ──────────────────────────────────────────────────
@@ -435,14 +503,7 @@ export function MealPlanner() {
               if (skipped[mt]) return null;
               const s = suggestions[mt];
               if (s === 'loading') {
-                return (
-                  <div key={mt} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 flex flex-col items-center gap-3 animate-pulse-slow">
-                    <Loader2 className="w-6 h-6 text-saffron animate-spin" />
-                    <p className="text-sm text-gray-400 font-medium">
-                      Thinking about your {mt}…
-                    </p>
-                  </div>
-                );
+                return <LoadingCard key={`loading-${mt}`} mealType={mt} />;
               }
               if (!s) return null;
               return (
