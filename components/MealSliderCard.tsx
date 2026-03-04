@@ -123,7 +123,9 @@ export function MealSliderCard({
       {!skipped && (
         <div className="px-4 pb-3 space-y-3">
           {/* Health */}
-          <div className="flex items-center gap-2">
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 text-center uppercase tracking-widest mb-1.5">Health Quotient</p>
+            <div className="flex items-center gap-2">
             <span className="text-base leading-none" title="Healthy">🥗</span>
             <input
               type="range"
@@ -137,10 +139,13 @@ export function MealSliderCard({
               }}
             />
             <span className="text-base leading-none" title="Indulgent">🍰</span>
+            </div>
           </div>
 
           {/* Complexity */}
-          <div className="flex items-center gap-2">
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 text-center uppercase tracking-widest mb-1.5">Preparation Time</p>
+            <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-400 whitespace-nowrap">5 min</span>
             <input
               type="range"
@@ -154,6 +159,7 @@ export function MealSliderCard({
               }}
             />
             <span className="text-xs font-semibold text-gray-400 whitespace-nowrap">60+ min</span>
+            </div>
           </div>
 
           {/* Custom notes */}

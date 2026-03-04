@@ -286,6 +286,7 @@ export function WeekPlanner({ numDays, profile }: Props) {
 
         {/* Health */}
         <div>
+          <p className="text-[10px] font-bold text-gray-400 text-center uppercase tracking-widest mb-1.5">Health Quotient</p>
           <div className="flex items-center justify-between text-xs font-semibold text-gray-400 mb-2">
             <span>🥗 Healthy</span><span>🍰 Indulgent</span>
           </div>
@@ -299,6 +300,7 @@ export function WeekPlanner({ numDays, profile }: Props) {
 
         {/* Complexity */}
         <div>
+          <p className="text-[10px] font-bold text-gray-400 text-center uppercase tracking-widest mb-1.5">Preparation Time</p>
           <div className="flex items-center justify-between text-xs font-semibold text-gray-400 mb-2">
             <span>⚡ 5 min</span><span>60+ min 👨‍🍳</span>
           </div>
