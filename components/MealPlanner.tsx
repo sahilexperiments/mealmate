@@ -4,7 +4,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { Sparkles, Save, Check, Settings, X, History, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { MealSliderCard } from './MealSliderCard';
-import { MealSuggestionCard } from './MealSuggestionCard';
+import { MealSuggestionCard, getLessOfThese } from './MealSuggestionCard';
+import { WeekPlanner } from './WeekPlanner';
+import { Onboarding } from './Onboarding';
 import type {
   MealType,
   MealDietType,
@@ -86,23 +88,6 @@ function getUserId(): string {
   return id;
 }
 
-function getTomorrow(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
-}
-
-function formatDisplayDate(isoDate: string): string {
-  const [y, m, day] = isoDate.split('-').map(Number);
-  const d = new Date(y, m - 1, day);
-  const today = new Date();
-  const tomorrow = new Date();
-  tomorrow.setDate(today.getDate() + 1);
-  if (d.toDateString() === today.toDateString()) return 'Today';
-  if (d.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
-  return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-}
-
 // ─── constants ──────────────────────────────────────────────────────────────
 
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner'];
@@ -117,7 +102,23 @@ const DEFAULT_PROFILE: UserProfile = {
   dietType: 'vegetarian',
   cookLanguage: 'hindi',
   servings: 2,
+  allergens: [],
+  gutFriendly: false,
+  onboardingComplete: false,
 };
+
+const ALLERGEN_OPTIONS = [
+  { id: 'peanuts',   emoji: '🥜', label: 'Peanuts'      },
+  { id: 'wheat',     emoji: '🌾', label: 'Wheat/Gluten' },
+  { id: 'dairy',     emoji: '🥛', label: 'Dairy'        },
+  { id: 'eggs',      emoji: '🥚', label: 'Eggs'         },
+  { id: 'fish',      emoji: '🐟', label: 'Fish'         },
+  { id: 'shellfish', emoji: '🍤', label: 'Shellfish'    },
+  { id: 'soy',       emoji: '🫘', label: 'Soy'          },
+  { id: 'tree_nuts', emoji: '🌰', label: 'Tree Nuts'    },
+  { id: 'sesame',    emoji: '🫚', label: 'Sesame'       },
+  { id: 'coconut',   emoji: '🥥', label: 'Coconut'      },
+];
 
 const DIET_LABELS: Record<DietType, string> = {
   vegetarian: '🥦 Vegetarian',
@@ -139,15 +140,16 @@ const LANG_LABELS: Record<CookLanguage, string> = {
 
 // ─── types ───────────────────────────────────────────────────────────────────
 
+type PlanMode = 'today' | 'week' | 'fortnight';
 type SuggestionState = MealSuggestion | null | 'loading';
 type SkippedState = Record<MealType, boolean>;
 
 // ─── component ───────────────────────────────────────────────────────────────
 
 export function MealPlanner() {
+  const [planMode, setPlanMode] = useState<PlanMode>('today');
   const [preferences, setPreferences] = useState<PlanPreferences>(DEFAULT_PREFS);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
-  const [date, setDate] = useState<string>(getTomorrow);
   const [skipped, setSkipped] = useState<SkippedState>({ breakfast: false, lunch: false, dinner: false });
   const [suggestions, setSuggestions] = useState<Record<MealType, SuggestionState>>({
     breakfast: null,
@@ -192,6 +194,9 @@ export function MealPlanner() {
             cookLanguage: profile.cookLanguage,
             servings: profile.servings,
             previousMealName,
+            allergens: profile.allergens ?? [],
+            gutFriendly: profile.gutFriendly ?? false,
+            lessOfThese: getLessOfThese(),
           }),
         });
 
@@ -249,7 +254,7 @@ export function MealPlanner() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-user-id': getUserId() },
         body: JSON.stringify({
-          date,
+          date: new Date().toISOString().split('T')[0],
           breakfast: skipped.breakfast ? undefined : suggestions.breakfast,
           lunch:     skipped.lunch     ? undefined : suggestions.lunch,
           dinner:    skipped.dinner    ? undefined : suggestions.dinner,
@@ -264,7 +269,7 @@ export function MealPlanner() {
       setSaving(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, suggestions, preferences, skipped]);
+  }, [suggestions, preferences, skipped]);
 
   // ── pref helpers ─────────────────────────────────────────────────────────
 
@@ -288,6 +293,16 @@ export function MealPlanner() {
   const allSkipped  = activeMeals.length === 0;
 
   // ─────────────────────────────────────────────────────────────────────────
+
+  // Show onboarding for new users
+  if (!profile.onboardingComplete) {
+    return (
+      <Onboarding
+        initialProfile={profile}
+        onComplete={(completed) => setProfile(completed)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-cream">
@@ -313,6 +328,24 @@ export function MealPlanner() {
               <Settings className="w-3.5 h-3.5" />
               Settings
             </button>
+          </div>
+        </div>
+        {/* Mode tabs */}
+        <div className="max-w-2xl mx-auto px-4 pb-3">
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+            {(['today', 'week', 'fortnight'] as PlanMode[]).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setPlanMode(mode)}
+                className={`flex-1 text-xs font-bold py-1.5 rounded-lg transition-all ${
+                  planMode === mode
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {mode === 'today' ? "Today's Plan" : mode === 'week' ? '1 Week' : '2 Weeks'}
+              </button>
+            ))}
           </div>
         </div>
       </header>
@@ -373,6 +406,54 @@ export function MealPlanner() {
                   <span className="text-sm text-gray-400">people</span>
                 </div>
               </div>
+
+              {/* Gut-friendly */}
+              <div>
+                <button
+                  onClick={() => setProfile((p) => ({ ...p, gutFriendly: !p.gutFriendly }))}
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left ${
+                    profile.gutFriendly
+                      ? 'border-emerald-400 bg-emerald-50'
+                      : 'border-gray-200 bg-gray-50 hover:border-emerald-200'
+                  }`}
+                >
+                  <span className="text-xl">🫀</span>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-gray-800">Gut-Friendly Mode</p>
+                    <p className="text-xs text-gray-400">Probiotic-rich, anti-inflammatory, easy-to-digest</p>
+                  </div>
+                  <div className={`w-9 h-5 rounded-full relative flex-shrink-0 transition-colors ${profile.gutFriendly ? 'bg-emerald-400' : 'bg-gray-300'}`}>
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${profile.gutFriendly ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </div>
+                </button>
+              </div>
+
+              {/* Allergens */}
+              <div>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-2">
+                  Allergens to Avoid
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {ALLERGEN_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setProfile((p) => ({
+                        ...p,
+                        allergens: (p.allergens ?? []).includes(opt.id)
+                          ? (p.allergens ?? []).filter((a) => a !== opt.id)
+                          : [...(p.allergens ?? []), opt.id],
+                      }))}
+                      className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-xl border transition-all ${
+                        (profile.allergens ?? []).includes(opt.id)
+                          ? 'bg-red-500 text-white border-red-500'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-red-300'
+                      }`}
+                    >
+                      {opt.emoji} {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -381,25 +462,9 @@ export function MealPlanner() {
       {/* ── MAIN CONTENT ─────────────────────────────────────────────────── */}
       <main className="max-w-2xl mx-auto px-4 pt-4 pb-6 space-y-3">
 
-        {/* Date + Servings row */}
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Date picker */}
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <span className="absolute inset-y-0 left-3 flex items-center text-sm pointer-events-none">📅</span>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => { setDate(e.target.value); setSavedId(null); }}
-                min={new Date().toISOString().split('T')[0]}
-                className="pl-9 pr-3 py-2 text-sm font-bold text-gray-800 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-saffron/40 cursor-pointer"
-              />
-            </div>
-            <span className="text-sm font-semibold text-saffron">{formatDisplayDate(date)}</span>
-          </div>
-
-          {/* Servings inline control */}
-          <div className="ml-auto flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-1.5">
+        {/* Servings row (always visible) */}
+        <div className="flex justify-end">
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-1.5">
             <span className="text-xs text-gray-400 font-medium">🍽️</span>
             <button
               onClick={() => setProfile((p) => ({ ...p, servings: Math.max(1, p.servings - 1) }))}
@@ -420,107 +485,118 @@ export function MealPlanner() {
           </div>
         </div>
 
-        {/* Meal slider cards */}
-        <div className="space-y-2">
-          {MEAL_TYPES.map((mt) => (
-            <MealSliderCard
-              key={mt}
-              mealType={mt}
-              health={preferences[mt].health}
-              complexity={preferences[mt].complexity}
-              dietType={preferences[mt].dietType}
-              skipped={skipped[mt]}
-              onHealthChange={(v) => updatePref(mt, 'health', v)}
-              onComplexityChange={(v) => updatePref(mt, 'complexity', v)}
-              onDietTypeChange={(d) => updateMealDiet(mt, d)}
-              onSkipToggle={() => toggleSkip(mt)}
-            />
-          ))}
-        </div>
-
-        {/* Error message */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-medium flex items-start gap-2 animate-fade-in">
-            <span>⚠️</span>
-            <span>{error}</span>
-          </div>
+        {/* ── WEEK / FORTNIGHT MODE ──────────────────────────────────────────── */}
+        {planMode !== 'today' && (
+          <WeekPlanner
+            numDays={planMode === 'week' ? 7 : 14}
+            profile={profile}
+          />
         )}
 
-        {/* Generate button */}
-        <button
-          onClick={generateAll}
-          disabled={anyLoading || allSkipped}
-          className="w-full flex items-center justify-center gap-2 bg-saffron hover:bg-orange-600 disabled:bg-orange-300 text-white font-black text-base py-4 rounded-2xl shadow-md shadow-orange-200 transition-all duration-200 disabled:cursor-not-allowed active:scale-[0.98]"
-        >
-          {anyLoading ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Thinking up your meals…
-            </>
-          ) : allSkipped ? (
-            <>
-              <Sparkles className="w-5 h-5 opacity-50" />
-              All meals skipped
-            </>
-          ) : (
-            <>
-              <Sparkles className="w-5 h-5" />
-              {hasGenerated ? 'Regenerate All' : 'Generate My Meal Plan'}
-            </>
-          )}
-        </button>
-
-        {/* ── RESULTS ─────────────────────────────────────────────────────── */}
-        {hasGenerated && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black text-gray-800">
-                Your Plan for {formatDisplayDate(date)}
-              </h2>
-              {allReady && (
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !!savedId}
-                  className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl transition-all ${
-                    savedId
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-gray-900 text-white hover:bg-gray-700'
-                  } disabled:opacity-60`}
-                >
-                  {saving ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : savedId ? (
-                    <Check className="w-3.5 h-3.5" />
-                  ) : (
-                    <Save className="w-3.5 h-3.5" />
-                  )}
-                  {savedId ? 'Saved!' : 'Save Plan'}
-                </button>
-              )}
+        {/* ── TODAY MODE ────────────────────────────────────────────────────── */}
+        {planMode === 'today' && (
+          <>
+            {/* Meal slider cards */}
+            <div className="space-y-2">
+              {MEAL_TYPES.map((mt) => (
+                <MealSliderCard
+                  key={mt}
+                  mealType={mt}
+                  health={preferences[mt].health}
+                  complexity={preferences[mt].complexity}
+                  dietType={preferences[mt].dietType}
+                  skipped={skipped[mt]}
+                  onHealthChange={(v) => updatePref(mt, 'health', v)}
+                  onComplexityChange={(v) => updatePref(mt, 'complexity', v)}
+                  onDietTypeChange={(d) => updateMealDiet(mt, d)}
+                  onSkipToggle={() => toggleSkip(mt)}
+                />
+              ))}
             </div>
 
-            {MEAL_TYPES.map((mt) => {
-              if (skipped[mt]) return null;
-              const s = suggestions[mt];
-              if (s === 'loading') {
-                return <LoadingCard key={`loading-${mt}`} mealType={mt} />;
-              }
-              if (!s) return null;
-              return (
-                <MealSuggestionCard
-                  key={s.id}
-                  suggestion={s}
-                  mealType={mt}
-                  cookLanguage={profile.cookLanguage}
-                  onNewSuggestion={() => handleNewSuggestion(mt)}
-                  isRegenerating={false}
-                />
-              );
-            })}
-          </div>
-        )}
+            {/* Error message */}
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm font-medium flex items-start gap-2 animate-fade-in">
+                <span>⚠️</span>
+                <span>{error}</span>
+              </div>
+            )}
 
-        <div className="pb-4" />
+            {/* Generate button */}
+            <button
+              onClick={generateAll}
+              disabled={anyLoading || allSkipped}
+              className="w-full flex items-center justify-center gap-2 bg-saffron hover:bg-orange-600 disabled:bg-orange-300 text-white font-black text-base py-4 rounded-2xl shadow-md shadow-orange-200 transition-all duration-200 disabled:cursor-not-allowed active:scale-[0.98]"
+            >
+              {anyLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Thinking up your meals…
+                </>
+              ) : allSkipped ? (
+                <>
+                  <Sparkles className="w-5 h-5 opacity-50" />
+                  All meals skipped
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5" />
+                  {hasGenerated ? 'Regenerate All' : 'Generate My Meal Plan'}
+                </>
+              )}
+            </button>
+
+            {/* Results */}
+            {hasGenerated && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-black text-gray-800">Your Meal Plan</h2>
+                  {allReady && (
+                    <button
+                      onClick={handleSave}
+                      disabled={saving || !!savedId}
+                      className={`flex items-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl transition-all ${
+                        savedId
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-gray-900 text-white hover:bg-gray-700'
+                      } disabled:opacity-60`}
+                    >
+                      {saving ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : savedId ? (
+                        <Check className="w-3.5 h-3.5" />
+                      ) : (
+                        <Save className="w-3.5 h-3.5" />
+                      )}
+                      {savedId ? 'Saved!' : 'Save Plan'}
+                    </button>
+                  )}
+                </div>
+
+                {MEAL_TYPES.map((mt) => {
+                  if (skipped[mt]) return null;
+                  const s = suggestions[mt];
+                  if (s === 'loading') {
+                    return <LoadingCard key={`loading-${mt}`} mealType={mt} />;
+                  }
+                  if (!s) return null;
+                  return (
+                    <MealSuggestionCard
+                      key={s.id}
+                      suggestion={s}
+                      mealType={mt}
+                      cookLanguage={profile.cookLanguage}
+                      onNewSuggestion={() => handleNewSuggestion(mt)}
+                      isRegenerating={false}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="pb-4" />
+          </>
+        )}
       </main>
     </div>
   );

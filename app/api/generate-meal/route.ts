@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { mealType, healthLevel, complexityLevel, dietType, cookLanguage, servings, previousMealName } = body;
+  const { mealType, healthLevel, complexityLevel, dietType, cookLanguage, servings, previousMealName, allergens, gutFriendly, lessOfThese } = body;
 
   if (!mealType || healthLevel == null || complexityLevel == null) {
     return NextResponse.json(
@@ -35,6 +35,9 @@ export async function POST(request: NextRequest) {
       cookLanguage: ((cookLanguage as string) ?? 'hindi') as CookLanguage,
       servings: Number(servings) || 2,
       previousMealName: previousMealName as string | undefined,
+      allergens: Array.isArray(allergens) ? (allergens as string[]) : [],
+      gutFriendly: Boolean(gutFriendly),
+      lessOfThese: Array.isArray(lessOfThese) ? (lessOfThese as string[]) : [],
     });
 
     return NextResponse.json(suggestion);

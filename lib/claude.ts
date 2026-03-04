@@ -27,8 +27,11 @@ export async function generateMealSuggestion(params: {
   cookLanguage: CookLanguage;
   servings: number;
   previousMealName?: string;
+  allergens?: string[];
+  gutFriendly?: boolean;
+  lessOfThese?: string[];
 }): Promise<MealSuggestion> {
-  const { mealType, healthLevel, complexityLevel, dietType, cookLanguage, servings, previousMealName } = params;
+  const { mealType, healthLevel, complexityLevel, dietType, cookLanguage, servings, previousMealName, allergens, gutFriendly, lessOfThese } = params;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured. Add it to .env.local');
@@ -51,6 +54,18 @@ export async function generateMealSuggestion(params: {
     ? `\nIMPORTANT: Do NOT suggest "${previousMealName}". Suggest a completely different dish.\n`
     : '';
 
+  const allergenClause = allergens && allergens.length > 0
+    ? `\nCRITICAL — ALLERGEN RESTRICTIONS: The user is allergic to the following. NEVER include these or any derivative in any ingredient: ${allergens.join(', ')}.\n`
+    : '';
+
+  const gutClause = gutFriendly
+    ? `\nGUT-FRIENDLY MODE: Prioritise probiotic-rich foods (yogurt, idli, dosa, kanji, fermented items), anti-inflammatory ingredients (turmeric, ginger, cumin), and easy-to-digest options. Avoid deep-fried preparations, excessive chilli, heavy cream-based gravies, and ultra-processed ingredients.\n`
+    : '';
+
+  const lessClause = lessOfThese && lessOfThese.length > 0
+    ? `\nUSER TASTE FEEDBACK — The user has previously said they want LESS of these: ${lessOfThese.join(', ')}. Avoid suggesting these dishes or closely similar styles/cuisines.\n`
+    : '';
+
   const prompt = `You are a culinary expert and nutritionist specialising in Indian cuisine for busy working professionals in Tier-1 Indian cities (Mumbai, Delhi, Bengaluru, Hyderabad, Chennai, Kolkata, Pune).
 
 Generate a ${mealType} meal suggestion with these parameters:
@@ -58,7 +73,7 @@ Generate a ${mealType} meal suggestion with these parameters:
 - Health preference: ${healthDesc}
 - Complexity preference: ${complexityDesc}
 - Number of servings: ${servings}
-${avoidClause}
+${avoidClause}${allergenClause}${gutClause}${lessClause}
 Requirements:
 1. Use ingredients easily available in Indian supermarkets and apps (BigBasket, Blinkit, Swiggy Instamart, Nature's Basket, D-Mart).
 2. Where relevant, recommend clean-label or organic brands available in India: Organic India, True Elements, 24 Mantra Organic, Tata Organic, Slurrp Farm, Farmley, The Whole Truth, Epigamia, Wingreens, Pristine, DiSano.

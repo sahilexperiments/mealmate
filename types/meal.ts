@@ -24,6 +24,9 @@ export interface UserProfile {
   dietType: DietType;
   cookLanguage: CookLanguage;
   servings: number;
+  allergens: string[];
+  gutFriendly: boolean;
+  onboardingComplete: boolean;
 }
 
 export interface Ingredient {

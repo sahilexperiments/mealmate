@@ -1,8 +1,28 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { RefreshCw, ChevronDown, ChevronUp, Play, Square, Loader2, Leaf, ShoppingBag } from 'lucide-react';
+import { RefreshCw, ChevronDown, ChevronUp, Play, Square, Loader2, Leaf, ShoppingBag, Heart, ThumbsUp, ThumbsDown } from 'lucide-react';
 import type { MealSuggestion, MealType, CookLanguage } from '@/types/meal';
+
+// ── feedback helpers (keyed by meal name, persisted in localStorage) ──────────
+
+function readList(key: string): string[] {
+  if (typeof window === 'undefined') return [];
+  try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
+}
+function writeList(key: string, items: string[]) {
+  localStorage.setItem(key, JSON.stringify(items));
+}
+function toggle(key: string, name: string): boolean {
+  const list = readList(key);
+  const exists = list.includes(name);
+  writeList(key, exists ? list.filter((n) => n !== name) : [name, ...list].slice(0, 40));
+  return !exists;
+}
+
+export function getLessOfThese(limit = 6): string[] {
+  return readList('mealmate-less').slice(0, limit);
+}
 
 const MEAL_CONFIG = {
   breakfast: { emoji: '🌅', label: 'Breakfast', bg: 'bg-saffron', text: 'text-white' },
@@ -49,6 +69,35 @@ interface Props {
 export function MealSuggestionCard({ suggestion, mealType, cookLanguage, onNewSuggestion, isRegenerating }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+
+  // ── meal feedback (persisted in localStorage) ─────────────────────────────
+  const name = suggestion.name;
+  const [liked,     setLiked]     = useState(() => readList('mealmate-likes').includes(name));
+  const [votedMore, setVotedMore] = useState(() => readList('mealmate-more').includes(name));
+  const [votedLess, setVotedLess] = useState(() => readList('mealmate-less').includes(name));
+
+  const handleLike = () => {
+    setLiked(toggle('mealmate-likes', name));
+  };
+
+  const handleMore = () => {
+    const nowActive = toggle('mealmate-more', name);
+    setVotedMore(nowActive);
+    if (nowActive && votedLess) {
+      // clear the opposing vote
+      writeList('mealmate-less', readList('mealmate-less').filter((n) => n !== name));
+      setVotedLess(false);
+    }
+  };
+
+  const handleLess = () => {
+    const nowActive = toggle('mealmate-less', name);
+    setVotedLess(nowActive);
+    if (nowActive && votedMore) {
+      writeList('mealmate-more', readList('mealmate-more').filter((n) => n !== name));
+      setVotedMore(false);
+    }
+  };
   const config = MEAL_CONFIG[mealType];
   const { nutritionalValue: n } = suggestion;
 
@@ -141,6 +190,47 @@ export function MealSuggestionCard({ suggestion, mealType, cookLanguage, onNewSu
             {speaking ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
             Cook&apos;s Note
             <span className="text-xs opacity-80 ml-0.5">({LANG_LABEL[cookLanguage]})</span>
+          </button>
+        </div>
+
+        {/* Feedback row */}
+        <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-gray-100">
+          <span className="text-[11px] text-gray-400 font-medium mr-0.5">Rate this meal:</span>
+          <button
+            onClick={handleLike}
+            title="Save to favourites"
+            className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-xl border transition-all ${
+              liked
+                ? 'bg-pink-50 text-pink-500 border-pink-200'
+                : 'bg-white text-gray-400 border-gray-200 hover:border-pink-300 hover:text-pink-400'
+            }`}
+          >
+            <Heart className={`w-3.5 h-3.5 ${liked ? 'fill-pink-500' : ''}`} />
+            {liked ? 'Saved' : 'Save'}
+          </button>
+          <button
+            onClick={handleMore}
+            title="Suggest more like this"
+            className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-xl border transition-all ${
+              votedMore
+                ? 'bg-emerald-50 text-emerald-600 border-emerald-300'
+                : 'bg-white text-gray-400 border-gray-200 hover:border-emerald-300 hover:text-emerald-500'
+            }`}
+          >
+            <ThumbsUp className="w-3.5 h-3.5" />
+            More
+          </button>
+          <button
+            onClick={handleLess}
+            title="Suggest less like this"
+            className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-xl border transition-all ${
+              votedLess
+                ? 'bg-red-50 text-red-500 border-red-300'
+                : 'bg-white text-gray-400 border-gray-200 hover:border-red-300 hover:text-red-400'
+            }`}
+          >
+            <ThumbsDown className="w-3.5 h-3.5" />
+            Less
           </button>
         </div>
       </div>
