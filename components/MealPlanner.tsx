@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Sparkles, Save, Check, Settings, X, History, Loader2, ChevronLeft } from 'lucide-react';
+import { Sparkles, Save, Check, Settings, X, History, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { MealSliderCard } from './MealSliderCard';
 import { MealSuggestionCard } from './MealSuggestionCard';
 import type {
   MealType,
+  MealDietType,
   DietType,
   CookLanguage,
   MealSuggestion,
@@ -48,9 +49,9 @@ function formatDisplayDate(isoDate: string): string {
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner'];
 
 const DEFAULT_PREFS: PlanPreferences = {
-  breakfast: { health: 25, complexity: 20 },
-  lunch: { health: 50, complexity: 45 },
-  dinner: { health: 50, complexity: 50 },
+  breakfast: { health: 25, complexity: 20, dietType: 'vegetarian' },
+  lunch:     { health: 50, complexity: 45, dietType: 'vegetarian' },
+  dinner:    { health: 50, complexity: 50, dietType: 'vegetarian' },
 };
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -80,6 +81,7 @@ const LANG_LABELS: Record<CookLanguage, string> = {
 // ─── types ───────────────────────────────────────────────────────────────────
 
 type SuggestionState = MealSuggestion | null | 'loading';
+type SkippedState = Record<MealType, boolean>;
 
 // ─── component ───────────────────────────────────────────────────────────────
 
@@ -87,6 +89,7 @@ export function MealPlanner() {
   const [preferences, setPreferences] = useState<PlanPreferences>(DEFAULT_PREFS);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [date, setDate] = useState<string>(getTomorrow);
+  const [skipped, setSkipped] = useState<SkippedState>({ breakfast: false, lunch: false, dinner: false });
   const [suggestions, setSuggestions] = useState<Record<MealType, SuggestionState>>({
     breakfast: null,
     lunch: null,
@@ -102,9 +105,7 @@ export function MealPlanner() {
   useEffect(() => {
     const saved = localStorage.getItem('mealmate-profile');
     if (saved) {
-      try {
-        setProfile(JSON.parse(saved));
-      } catch { /* ignore */ }
+      try { setProfile(JSON.parse(saved)); } catch { /* ignore */ }
     }
   }, []);
 
@@ -128,7 +129,7 @@ export function MealPlanner() {
             mealType,
             healthLevel: preferences[mealType].health,
             complexityLevel: preferences[mealType].complexity,
-            dietType: profile.dietType,
+            dietType: preferences[mealType].dietType,
             cookLanguage: profile.cookLanguage,
             servings: profile.servings,
             previousMealName,
@@ -151,13 +152,13 @@ export function MealPlanner() {
     [preferences, profile],
   );
 
-  // ── generate all three meals in parallel ────────────────────────────────
+  // ── generate all active (non-skipped) meals in parallel ─────────────────
 
   const generateAll = useCallback(() => {
     setHasGenerated(true);
     setSavedId(null);
-    MEAL_TYPES.forEach((mt) => generateMeal(mt));
-  }, [generateMeal]);
+    MEAL_TYPES.filter((mt) => !skipped[mt]).forEach((mt) => generateMeal(mt));
+  }, [generateMeal, skipped]);
 
   // ── regenerate one meal ──────────────────────────────────────────────────
 
@@ -173,12 +174,7 @@ export function MealPlanner() {
   // ── save plan ────────────────────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
-    const allReady = MEAL_TYPES.every((mt) => {
-      const s = suggestions[mt];
-      return s && s !== 'loading';
-    });
     if (!allReady) return;
-
     setSaving(true);
     try {
       const res = await fetch('/api/meal-plans', {
@@ -186,9 +182,9 @@ export function MealPlanner() {
         headers: { 'Content-Type': 'application/json', 'x-user-id': getUserId() },
         body: JSON.stringify({
           date,
-          breakfast: suggestions.breakfast,
-          lunch: suggestions.lunch,
-          dinner: suggestions.dinner,
+          breakfast: skipped.breakfast ? undefined : suggestions.breakfast,
+          lunch:     skipped.lunch     ? undefined : suggestions.lunch,
+          dinner:    skipped.dinner    ? undefined : suggestions.dinner,
           preferences,
         }),
       });
@@ -199,19 +195,29 @@ export function MealPlanner() {
     } finally {
       setSaving(false);
     }
-  }, [date, suggestions, preferences]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, suggestions, preferences, skipped]);
+
+  // ── pref helpers ─────────────────────────────────────────────────────────
+
+  const updatePref = (meal: MealType, key: 'health' | 'complexity', value: number) =>
+    setPreferences((p) => ({ ...p, [meal]: { ...p[meal], [key]: value } }));
+
+  const updateMealDiet = (meal: MealType, d: MealDietType) =>
+    setPreferences((p) => ({ ...p, [meal]: { ...p[meal], dietType: d } }));
+
+  const toggleSkip = (meal: MealType) =>
+    setSkipped((s) => ({ ...s, [meal]: !s[meal] }));
 
   // ── derived state ────────────────────────────────────────────────────────
 
-  const anyLoading = MEAL_TYPES.some((mt) => suggestions[mt] === 'loading');
-  const allReady = MEAL_TYPES.every((mt) => {
+  const activeMeals = MEAL_TYPES.filter((mt) => !skipped[mt]);
+  const anyLoading  = activeMeals.some((mt) => suggestions[mt] === 'loading');
+  const allReady    = activeMeals.length > 0 && activeMeals.every((mt) => {
     const s = suggestions[mt];
     return s && s !== 'loading';
   });
-
-  const updatePref = (meal: MealType, key: keyof (typeof preferences)[MealType], value: number) => {
-    setPreferences((p) => ({ ...p, [meal]: { ...p[meal], [key]: value } }));
-  };
+  const allSkipped  = activeMeals.length === 0;
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -255,26 +261,6 @@ export function MealPlanner() {
             </button>
             <h2 className="text-sm font-black text-gray-700 uppercase tracking-widest mb-4">Preferences</h2>
             <div className="space-y-4">
-              {/* Diet type */}
-              <div>
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-2">Diet</label>
-                <div className="flex flex-wrap gap-2">
-                  {(Object.keys(DIET_LABELS) as DietType[]).map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setProfile((p) => ({ ...p, dietType: d }))}
-                      className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
-                        profile.dietType === d
-                          ? 'bg-saffron text-white border-saffron'
-                          : 'bg-white text-gray-600 border-gray-200 hover:border-saffron'
-                      }`}
-                    >
-                      {DIET_LABELS[d]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Cook language */}
               <div>
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-2">
@@ -300,7 +286,7 @@ export function MealPlanner() {
               {/* Servings */}
               <div>
                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-2">
-                  Servings
+                  Default Servings
                 </label>
                 <div className="flex items-center gap-3">
                   <button
@@ -325,48 +311,61 @@ export function MealPlanner() {
       )}
 
       {/* ── MAIN CONTENT ─────────────────────────────────────────────────── */}
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Hero */}
-        {!hasGenerated && (
-          <div className="text-center pt-2 pb-4 animate-fade-in">
-            <h1 className="text-3xl font-black text-gray-900 tracking-tight">
-              What&apos;s on the menu?
-            </h1>
-            <p className="text-gray-500 mt-1.5 text-sm">
-              Set your vibe, hit generate — we&apos;ll handle the rest.
-            </p>
-          </div>
-        )}
+      <main className="max-w-2xl mx-auto px-4 pt-4 pb-6 space-y-3">
 
-        {/* Date selector */}
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-bold text-gray-500">Plan for</span>
-          <div className="relative">
-            <span className="absolute inset-y-0 left-3 flex items-center text-base pointer-events-none">📅</span>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setSavedId(null);
-              }}
-              min={new Date().toISOString().split('T')[0]}
-              className="pl-9 pr-3 py-2 text-sm font-bold text-gray-800 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-saffron/40 cursor-pointer"
-            />
+        {/* Date + Servings row */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Date picker */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <span className="absolute inset-y-0 left-3 flex items-center text-sm pointer-events-none">📅</span>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => { setDate(e.target.value); setSavedId(null); }}
+                min={new Date().toISOString().split('T')[0]}
+                className="pl-9 pr-3 py-2 text-sm font-bold text-gray-800 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-saffron/40 cursor-pointer"
+              />
+            </div>
+            <span className="text-sm font-semibold text-saffron">{formatDisplayDate(date)}</span>
           </div>
-          <span className="text-sm font-semibold text-saffron">{formatDisplayDate(date)}</span>
+
+          {/* Servings inline control */}
+          <div className="ml-auto flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-1.5">
+            <span className="text-xs text-gray-400 font-medium">🍽️</span>
+            <button
+              onClick={() => setProfile((p) => ({ ...p, servings: Math.max(1, p.servings - 1) }))}
+              className="w-5 h-5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-sm flex items-center justify-center transition-colors leading-none"
+            >
+              −
+            </button>
+            <span className="text-sm font-black text-gray-800 w-4 text-center tabular-nums">{profile.servings}</span>
+            <button
+              onClick={() => setProfile((p) => ({ ...p, servings: Math.min(8, p.servings + 1) }))}
+              className="w-5 h-5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-sm flex items-center justify-center transition-colors leading-none"
+            >
+              +
+            </button>
+            <span className="text-xs text-gray-400 font-medium">
+              {profile.servings === 1 ? 'serving' : 'servings'}
+            </span>
+          </div>
         </div>
 
-        {/* Slider cards */}
-        <div className="space-y-4">
+        {/* Meal slider cards */}
+        <div className="space-y-2">
           {MEAL_TYPES.map((mt) => (
             <MealSliderCard
               key={mt}
               mealType={mt}
               health={preferences[mt].health}
               complexity={preferences[mt].complexity}
+              dietType={preferences[mt].dietType}
+              skipped={skipped[mt]}
               onHealthChange={(v) => updatePref(mt, 'health', v)}
               onComplexityChange={(v) => updatePref(mt, 'complexity', v)}
+              onDietTypeChange={(d) => updateMealDiet(mt, d)}
+              onSkipToggle={() => toggleSkip(mt)}
             />
           ))}
         </div>
@@ -382,13 +381,18 @@ export function MealPlanner() {
         {/* Generate button */}
         <button
           onClick={generateAll}
-          disabled={anyLoading}
+          disabled={anyLoading || allSkipped}
           className="w-full flex items-center justify-center gap-2 bg-saffron hover:bg-orange-600 disabled:bg-orange-300 text-white font-black text-base py-4 rounded-2xl shadow-md shadow-orange-200 transition-all duration-200 disabled:cursor-not-allowed active:scale-[0.98]"
         >
           {anyLoading ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
               Thinking up your meals…
+            </>
+          ) : allSkipped ? (
+            <>
+              <Sparkles className="w-5 h-5 opacity-50" />
+              All meals skipped
             </>
           ) : (
             <>
@@ -397,21 +401,6 @@ export function MealPlanner() {
             </>
           )}
         </button>
-
-        {/* Profile quick-view chips */}
-        <div className="flex flex-wrap items-center gap-2 justify-center text-xs text-gray-400">
-          <span className="font-semibold">{DIET_LABELS[profile.dietType]}</span>
-          <span>·</span>
-          <span>{profile.servings} serving{profile.servings !== 1 ? 's' : ''}</span>
-          <span>·</span>
-          <span>Cook speaks {LANG_LABELS[profile.cookLanguage]}</span>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="text-saffron font-semibold hover:underline"
-          >
-            Change
-          </button>
-        </div>
 
         {/* ── RESULTS ─────────────────────────────────────────────────────── */}
         {hasGenerated && (
@@ -443,6 +432,7 @@ export function MealPlanner() {
             </div>
 
             {MEAL_TYPES.map((mt) => {
+              if (skipped[mt]) return null;
               const s = suggestions[mt];
               if (s === 'loading') {
                 return (
@@ -469,7 +459,7 @@ export function MealPlanner() {
           </div>
         )}
 
-        <div className="pb-8" />
+        <div className="pb-4" />
       </main>
     </div>
   );

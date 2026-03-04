@@ -12,9 +12,12 @@ export type CookLanguage =
   | 'bengali'
   | 'gujarati';
 
+export type MealDietType = 'vegetarian' | 'eggetarian' | 'non-vegetarian';
+
 export interface MealPreferences {
   health: number;     // 0 = very healthy → 100 = very indulgent
   complexity: number; // 0 = very easy   → 100 = very cumbersome
+  dietType: MealDietType;
 }
 
 export interface UserProfile {
