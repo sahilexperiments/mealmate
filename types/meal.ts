@@ -27,6 +27,7 @@ export interface UserProfile {
   allergens: string[];
   gutFriendly: boolean;
   onboardingComplete: boolean;
+  myMeals: string[];   // user's own meal pool
 }
 
 export interface Ingredient {

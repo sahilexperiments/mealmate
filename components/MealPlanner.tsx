@@ -4,9 +4,10 @@ import { useState, useCallback, useEffect } from 'react';
 import { Sparkles, Save, Check, Settings, X, History, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { MealSliderCard } from './MealSliderCard';
-import { MealSuggestionCard, getLessOfThese } from './MealSuggestionCard';
+import { MealSuggestionCard } from './MealSuggestionCard';
 import { WeekPlanner } from './WeekPlanner';
 import { Onboarding } from './Onboarding';
+import { getLessOfThese, getMoreOfThese, getLikedMeals, addRecentMeal, getRecentMeals } from '@/lib/mealHistory';
 import type {
   MealType,
   MealDietType,
@@ -93,9 +94,9 @@ function getUserId(): string {
 const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner'];
 
 const DEFAULT_PREFS: PlanPreferences = {
-  breakfast: { health: 25, complexity: 20, dietType: 'vegetarian' },
-  lunch:     { health: 50, complexity: 45, dietType: 'vegetarian' },
-  dinner:    { health: 50, complexity: 50, dietType: 'vegetarian' },
+  breakfast: { health: 20, complexity: 20, dietType: 'vegetarian' },
+  lunch:     { health: 40, complexity: 60, dietType: 'vegetarian' },
+  dinner:    { health: 50, complexity: 30, dietType: 'vegetarian' },
 };
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -105,6 +106,7 @@ const DEFAULT_PROFILE: UserProfile = {
   allergens: [],
   gutFriendly: false,
   onboardingComplete: false,
+  myMeals: [],
 };
 
 const ALLERGEN_OPTIONS = [
@@ -156,6 +158,8 @@ export function MealPlanner() {
     lunch: null,
     dinner: null,
   });
+  const [customNotes, setCustomNotes] = useState<Record<MealType, string>>({ breakfast: '', lunch: '', dinner: '' });
+  const [newMealInput, setNewMealInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -194,9 +198,13 @@ export function MealPlanner() {
             cookLanguage: profile.cookLanguage,
             servings: profile.servings,
             previousMealName,
-            allergens: profile.allergens ?? [],
-            gutFriendly: profile.gutFriendly ?? false,
-            lessOfThese: getLessOfThese(),
+            allergens:    profile.allergens ?? [],
+            gutFriendly:  profile.gutFriendly ?? false,
+            lessOfThese:  getLessOfThese(),
+            recentMeals:  getRecentMeals(mealType),
+            customNotes:  customNotes[mealType] || undefined,
+            myMealPool:   profile.myMeals ?? [],
+            moreOfThese:  [...getMoreOfThese(), ...getLikedMeals()],
           }),
         });
 
@@ -207,6 +215,7 @@ export function MealPlanner() {
 
         const suggestion: MealSuggestion = await res.json();
         setSuggestions((prev) => ({ ...prev, [mealType]: suggestion }));
+        addRecentMeal(mealType, suggestion.name);
       } catch (err) {
         console.error(err);
         setSuggestions((prev) => ({ ...prev, [mealType]: null }));
@@ -454,6 +463,59 @@ export function MealPlanner() {
                   ))}
                 </div>
               </div>
+
+              {/* My Meal Pool */}
+              <div>
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-1">
+                  My Meal Pool
+                </label>
+                <p className="text-xs text-gray-400 mb-2">
+                  Dishes you love — we&apos;ll suggest these (or similar) in your plans.
+                </p>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={newMealInput}
+                    onChange={(e) => setNewMealInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newMealInput.trim()) {
+                        setProfile((p) => ({ ...p, myMeals: [...(p.myMeals ?? []).filter((m) => m !== newMealInput.trim()), newMealInput.trim()] }));
+                        setNewMealInput('');
+                      }
+                    }}
+                    placeholder="e.g. Palak Paneer, Poha…"
+                    className="flex-1 text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-orange-300"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!newMealInput.trim()) return;
+                      setProfile((p) => ({ ...p, myMeals: [...(p.myMeals ?? []).filter((m) => m !== newMealInput.trim()), newMealInput.trim()] }));
+                      setNewMealInput('');
+                    }}
+                    disabled={!newMealInput.trim()}
+                    className="px-3 py-2 bg-saffron hover:bg-orange-600 disabled:opacity-40 text-white text-sm font-bold rounded-xl transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(profile.myMeals ?? []).length === 0 ? (
+                    <p className="text-xs text-gray-300">No meals added yet.</p>
+                  ) : (
+                    (profile.myMeals ?? []).map((meal) => (
+                      <span key={meal} className="flex items-center gap-1.5 text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-200 px-2.5 py-1.5 rounded-xl">
+                        {meal}
+                        <button
+                          onClick={() => setProfile((p) => ({ ...p, myMeals: (p.myMeals ?? []).filter((m) => m !== meal) }))}
+                          className="text-orange-400 hover:text-orange-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -506,10 +568,12 @@ export function MealPlanner() {
                   complexity={preferences[mt].complexity}
                   dietType={preferences[mt].dietType}
                   skipped={skipped[mt]}
+                  customNotes={customNotes[mt]}
                   onHealthChange={(v) => updatePref(mt, 'health', v)}
                   onComplexityChange={(v) => updatePref(mt, 'complexity', v)}
                   onDietTypeChange={(d) => updateMealDiet(mt, d)}
                   onSkipToggle={() => toggleSkip(mt)}
+                  onCustomNotesChange={(v) => setCustomNotes((n) => ({ ...n, [mt]: v }))}
                 />
               ))}
             </div>

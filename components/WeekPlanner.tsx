@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { Sparkles, ChevronDown, ChevronUp, Loader2, Check } from 'lucide-react';
 import { MealSuggestionCard } from './MealSuggestionCard';
+import { addRecentMeal, getRecentMeals, getLessOfThese, getMoreOfThese, getLikedMeals } from '@/lib/mealHistory';
 import type { MealType, DietType, MealDietType, CookLanguage, MealSuggestion, UserProfile } from '@/types/meal';
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -72,11 +73,19 @@ async function generateOneMeal(
   servings: number,
   allergens: string[],
   gutFriendly: boolean,
+  myMealPool: string[],
+  lessOfThese: string[],
+  moreOfThese: string[],
+  recentMeals: string[],
 ): Promise<MealSuggestion> {
   const res = await fetch('/api/generate-meal', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mealType, healthLevel: health, complexityLevel: complexity, dietType, cookLanguage, servings, allergens, gutFriendly }),
+    body: JSON.stringify({
+      mealType, healthLevel: health, complexityLevel: complexity,
+      dietType, cookLanguage, servings, allergens, gutFriendly,
+      myMealPool, lessOfThese, moreOfThese, recentMeals,
+    }),
   });
   if (!res.ok) {
     const { error } = await res.json().catch(() => ({ error: 'Failed' }));
@@ -239,7 +248,16 @@ export function WeekPlanner({ numDays, profile }: Props) {
       for (const mt of activeMeals) {
         setDayPlans((prev) => prev.map((p, i) => i === d ? { ...p, [mt]: 'loading' } : p));
         try {
-          const meal = await generateOneMeal(mt, health, complexity, dietType as DietType, profile.cookLanguage, profile.servings, profile.allergens ?? [], profile.gutFriendly ?? false);
+          const meal = await generateOneMeal(
+            mt, health, complexity, dietType as DietType,
+            profile.cookLanguage, profile.servings,
+            profile.allergens ?? [], profile.gutFriendly ?? false,
+            profile.myMeals ?? [],
+            getLessOfThese(),
+            [...getMoreOfThese(), ...getLikedMeals()],
+            getRecentMeals(mt),
+          );
+          addRecentMeal(mt, meal.name);
           results[d][mt] = meal;
           setDayPlans((prev) => prev.map((p, i) => i === d ? { ...p, [mt]: meal } : p));
         } catch {

@@ -30,8 +30,14 @@ export async function generateMealSuggestion(params: {
   allergens?: string[];
   gutFriendly?: boolean;
   lessOfThese?: string[];
+  recentMeals?: string[];
+  customNotes?: string;
+  myMealPool?: string[];
+  moreOfThese?: string[];
 }): Promise<MealSuggestion> {
-  const { mealType, healthLevel, complexityLevel, dietType, cookLanguage, servings, previousMealName, allergens, gutFriendly, lessOfThese } = params;
+  const { mealType, healthLevel, complexityLevel, dietType, cookLanguage, servings,
+    previousMealName, allergens, gutFriendly, lessOfThese,
+    recentMeals, customNotes, myMealPool, moreOfThese } = params;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not configured. Add it to .env.local');
@@ -66,6 +72,22 @@ export async function generateMealSuggestion(params: {
     ? `\nUSER TASTE FEEDBACK — The user has previously said they want LESS of these: ${lessOfThese.join(', ')}. Avoid suggesting these dishes or closely similar styles/cuisines.\n`
     : '';
 
+  const recentClause = recentMeals && recentMeals.length > 0
+    ? `\nVARIETY — The user has recently been shown these meals. Do NOT repeat them: ${recentMeals.join(', ')}. If the exact health/complexity parameters yield no other option, adjust by up to 10% to find a genuinely different dish.\n`
+    : '';
+
+  const customNotesClause = customNotes?.trim()
+    ? `\nUSER REQUEST for this ${mealType}: "${customNotes.trim()}". Incorporate this as best you can while respecting all other constraints.\n`
+    : '';
+
+  const myMealPoolClause = myMealPool && myMealPool.length > 0
+    ? `\nUSER FAVOURITES: The user enjoys cooking/eating these dishes: ${myMealPool.join(', ')}. When suitable and not recently suggested, you may recommend one of these or a closely inspired dish.\n`
+    : '';
+
+  const moreClause = moreOfThese && moreOfThese.length > 0
+    ? `\nUSER TASTE PROFILE — The user has previously enjoyed and upvoted meals like: ${moreOfThese.join(', ')}. Keep their apparent cuisine preferences and flavour profile in mind.\n`
+    : '';
+
   const prompt = `You are a culinary expert and nutritionist specialising in Indian cuisine for busy working professionals in Tier-1 Indian cities (Mumbai, Delhi, Bengaluru, Hyderabad, Chennai, Kolkata, Pune).
 
 Generate a ${mealType} meal suggestion with these parameters:
@@ -73,7 +95,7 @@ Generate a ${mealType} meal suggestion with these parameters:
 - Health preference: ${healthDesc}
 - Complexity preference: ${complexityDesc}
 - Number of servings: ${servings}
-${avoidClause}${allergenClause}${gutClause}${lessClause}
+${avoidClause}${allergenClause}${gutClause}${lessClause}${recentClause}${customNotesClause}${myMealPoolClause}${moreClause}
 Requirements:
 1. Use ingredients easily available in Indian supermarkets and apps (BigBasket, Blinkit, Swiggy Instamart, Nature's Basket, D-Mart).
 2. Where relevant, recommend clean-label or organic brands available in India: Organic India, True Elements, 24 Mantra Organic, Tata Organic, Slurrp Farm, Farmley, The Whole Truth, Epigamia, Wingreens, Pristine, DiSano.

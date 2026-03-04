@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+import { Pencil } from 'lucide-react';
 import type { MealType, MealDietType } from '@/types/meal';
 
 const MEAL_CONFIG = {
@@ -38,10 +40,12 @@ interface MealSliderCardProps {
   complexity: number;
   dietType: MealDietType;
   skipped: boolean;
+  customNotes: string;
   onHealthChange: (v: number) => void;
   onComplexityChange: (v: number) => void;
   onDietTypeChange: (d: MealDietType) => void;
   onSkipToggle: () => void;
+  onCustomNotesChange: (v: string) => void;
 }
 
 export function MealSliderCard({
@@ -50,12 +54,15 @@ export function MealSliderCard({
   complexity,
   dietType,
   skipped,
+  customNotes,
   onHealthChange,
   onComplexityChange,
   onDietTypeChange,
   onSkipToggle,
+  onCustomNotesChange,
 }: MealSliderCardProps) {
   const config = MEAL_CONFIG[mealType];
+  const [showNotes, setShowNotes] = useState(false);
 
   return (
     <div
@@ -147,6 +154,40 @@ export function MealSliderCard({
               }}
             />
             <span className="text-base leading-none" title="Cumbersome">👨‍🍳</span>
+          </div>
+
+          {/* Custom notes */}
+          <div className="pt-1">
+            {!showNotes ? (
+              <button
+                onClick={() => setShowNotes(true)}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <Pencil className="w-3 h-3" />
+                {customNotes ? (
+                  <span>Note: <em className="not-italic font-semibold text-gray-600">"{customNotes.slice(0, 30)}{customNotes.length > 30 ? '…' : ''}"</em></span>
+                ) : (
+                  <span>Add a custom request…</span>
+                )}
+              </button>
+            ) : (
+              <div className="space-y-1.5">
+                <textarea
+                  autoFocus
+                  value={customNotes}
+                  onChange={(e) => onCustomNotesChange(e.target.value)}
+                  placeholder={`e.g. "Something with paneer" or "Quick South Indian today"`}
+                  rows={2}
+                  className="w-full text-sm text-gray-700 bg-white/70 border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-orange-300 resize-none placeholder:text-gray-400"
+                />
+                <button
+                  onClick={() => setShowNotes(false)}
+                  className="text-xs text-gray-400 hover:text-gray-600 font-medium"
+                >
+                  Done
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

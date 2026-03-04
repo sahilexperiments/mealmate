@@ -17,7 +17,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { mealType, healthLevel, complexityLevel, dietType, cookLanguage, servings, previousMealName, allergens, gutFriendly, lessOfThese } = body;
+  const { mealType, healthLevel, complexityLevel, dietType, cookLanguage, servings,
+    previousMealName, allergens, gutFriendly, lessOfThese,
+    recentMeals, customNotes, myMealPool, moreOfThese } = body;
 
   if (!mealType || healthLevel == null || complexityLevel == null) {
     return NextResponse.json(
@@ -35,9 +37,13 @@ export async function POST(request: NextRequest) {
       cookLanguage: ((cookLanguage as string) ?? 'hindi') as CookLanguage,
       servings: Number(servings) || 2,
       previousMealName: previousMealName as string | undefined,
-      allergens: Array.isArray(allergens) ? (allergens as string[]) : [],
-      gutFriendly: Boolean(gutFriendly),
-      lessOfThese: Array.isArray(lessOfThese) ? (lessOfThese as string[]) : [],
+      allergens:    Array.isArray(allergens)    ? (allergens    as string[]) : [],
+      gutFriendly:  Boolean(gutFriendly),
+      lessOfThese:  Array.isArray(lessOfThese)  ? (lessOfThese  as string[]) : [],
+      recentMeals:  Array.isArray(recentMeals)  ? (recentMeals  as string[]) : [],
+      customNotes:  typeof customNotes === 'string' ? customNotes : undefined,
+      myMealPool:   Array.isArray(myMealPool)   ? (myMealPool   as string[]) : [],
+      moreOfThese:  Array.isArray(moreOfThese)  ? (moreOfThese  as string[]) : [],
     });
 
     return NextResponse.json(suggestion);

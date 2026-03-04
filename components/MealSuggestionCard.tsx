@@ -3,26 +3,7 @@
 import { useState, useCallback } from 'react';
 import { RefreshCw, ChevronDown, ChevronUp, Play, Square, Loader2, Leaf, ShoppingBag, Heart, ThumbsUp, ThumbsDown } from 'lucide-react';
 import type { MealSuggestion, MealType, CookLanguage } from '@/types/meal';
-
-// ── feedback helpers (keyed by meal name, persisted in localStorage) ──────────
-
-function readList(key: string): string[] {
-  if (typeof window === 'undefined') return [];
-  try { return JSON.parse(localStorage.getItem(key) ?? '[]'); } catch { return []; }
-}
-function writeList(key: string, items: string[]) {
-  localStorage.setItem(key, JSON.stringify(items));
-}
-function toggle(key: string, name: string): boolean {
-  const list = readList(key);
-  const exists = list.includes(name);
-  writeList(key, exists ? list.filter((n) => n !== name) : [name, ...list].slice(0, 40));
-  return !exists;
-}
-
-export function getLessOfThese(limit = 6): string[] {
-  return readList('mealmate-less').slice(0, limit);
-}
+import { toggleFeedback, removeFromFeedbackList, isInFeedbackList, LIKES_KEY, MORE_KEY, LESS_KEY } from '@/lib/mealHistory';
 
 const MEAL_CONFIG = {
   breakfast: { emoji: '🌅', label: 'Breakfast', bg: 'bg-saffron', text: 'text-white' },
@@ -70,33 +51,24 @@ export function MealSuggestionCard({ suggestion, mealType, cookLanguage, onNewSu
   const [expanded, setExpanded] = useState(false);
   const [speaking, setSpeaking] = useState(false);
 
-  // ── meal feedback (persisted in localStorage) ─────────────────────────────
+  // ── meal feedback (persisted in localStorage via mealHistory) ────────────
   const name = suggestion.name;
-  const [liked,     setLiked]     = useState(() => readList('mealmate-likes').includes(name));
-  const [votedMore, setVotedMore] = useState(() => readList('mealmate-more').includes(name));
-  const [votedLess, setVotedLess] = useState(() => readList('mealmate-less').includes(name));
+  const [liked,     setLiked]     = useState(() => isInFeedbackList(LIKES_KEY, name));
+  const [votedMore, setVotedMore] = useState(() => isInFeedbackList(MORE_KEY,  name));
+  const [votedLess, setVotedLess] = useState(() => isInFeedbackList(LESS_KEY,  name));
 
-  const handleLike = () => {
-    setLiked(toggle('mealmate-likes', name));
-  };
+  const handleLike = () => setLiked(toggleFeedback(LIKES_KEY, name));
 
   const handleMore = () => {
-    const nowActive = toggle('mealmate-more', name);
+    const nowActive = toggleFeedback(MORE_KEY, name);
     setVotedMore(nowActive);
-    if (nowActive && votedLess) {
-      // clear the opposing vote
-      writeList('mealmate-less', readList('mealmate-less').filter((n) => n !== name));
-      setVotedLess(false);
-    }
+    if (nowActive && votedLess) { removeFromFeedbackList(LESS_KEY, name); setVotedLess(false); }
   };
 
   const handleLess = () => {
-    const nowActive = toggle('mealmate-less', name);
+    const nowActive = toggleFeedback(LESS_KEY, name);
     setVotedLess(nowActive);
-    if (nowActive && votedMore) {
-      writeList('mealmate-more', readList('mealmate-more').filter((n) => n !== name));
-      setVotedMore(false);
-    }
+    if (nowActive && votedMore) { removeFromFeedbackList(MORE_KEY, name); setVotedMore(false); }
   };
   const config = MEAL_CONFIG[mealType];
   const { nutritionalValue: n } = suggestion;
