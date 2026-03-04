@@ -25,6 +25,7 @@ export interface CustomDish {
   name: string;
   description: string;
   feedback: 'like' | 'more' | 'less' | null;
+  mealTypes: MealType[]; // empty = applies to all meal slots
 }
 
 export interface UserProfile {

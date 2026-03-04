@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import { Sparkles, Save, Check, Settings, X, History, Loader2, User } from 'lucide-react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
+import { Sparkles, Save, Check, Settings, X, History, Loader2, User, ListPlus, Heart, ThumbsUp, ThumbsDown, Trash2, Plus, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { MealSliderCard } from './MealSliderCard';
 import { MealSuggestionCard } from './MealSuggestionCard';
@@ -16,6 +17,7 @@ import type {
   MealSuggestion,
   PlanPreferences,
   UserProfile,
+  CustomDish,
 } from '@/types/meal';
 
 // ─── loading messages ────────────────────────────────────────────────────────
@@ -150,6 +152,13 @@ type SkippedState = Record<MealType, boolean>;
 // ─── component ───────────────────────────────────────────────────────────────
 
 export function MealPlanner() {
+  const { data: session } = useSession();
+  // Scope preferences to the logged-in user so each account has its own settings
+  const profileKey = useMemo(() => {
+    const uid = (session?.user as { id?: string })?.id ?? getUserId();
+    return `mealmate-profile-${uid}`;
+  }, [session]);
+
   const [planMode, setPlanMode] = useState<PlanMode>('today');
   const [preferences, setPreferences] = useState<PlanPreferences>(DEFAULT_PREFS);
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
@@ -162,23 +171,29 @@ export function MealPlanner() {
   const [customNotes, setCustomNotes] = useState<Record<MealType, string>>({ breakfast: '', lunch: '', dinner: '' });
   const [newMealInput, setNewMealInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [showMyList, setShowMyList] = useState(false);
+  const [newDishName, setNewDishName] = useState('');
+  const [newDishDesc, setNewDishDesc] = useState('');
+  const [addingDish, setAddingDish] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasGenerated, setHasGenerated] = useState(false);
 
-  // Load profile from localStorage
+  // Load profile from localStorage (re-load when profileKey changes, i.e. user switches)
   useEffect(() => {
-    const saved = localStorage.getItem('mealmate-profile');
+    const saved = localStorage.getItem(profileKey);
     if (saved) {
       try { setProfile(JSON.parse(saved)); } catch { /* ignore */ }
+    } else {
+      setProfile(DEFAULT_PROFILE);
     }
-  }, []);
+  }, [profileKey]);
 
   // Persist profile to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem('mealmate-profile', JSON.stringify(profile));
-  }, [profile]);
+    localStorage.setItem(profileKey, JSON.stringify(profile));
+  }, [profile, profileKey]);
 
   // ── generate a single meal ───────────────────────────────────────────────
 
@@ -206,7 +221,9 @@ export function MealPlanner() {
             customNotes:  customNotes[mealType] || undefined,
             myMealPool:   profile.myMeals ?? [],
             moreOfThese:  [...getMoreOfThese(), ...getLikedMeals()],
-            customDishes: profile.customDishes ?? [],
+            customDishes: (profile.customDishes ?? []).filter(
+              (d) => d.mealTypes.length === 0 || d.mealTypes.includes(mealType),
+            ),
           }),
         });
 
@@ -263,7 +280,7 @@ export function MealPlanner() {
     try {
       const res = await fetch('/api/meal-plans', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': getUserId() },
+        headers: { 'Content-Type': 'application/json', 'x-user-id': (session?.user as { id?: string })?.id ?? getUserId() },
         body: JSON.stringify({
           date: new Date().toISOString().split('T')[0],
           breakfast: skipped.breakfast ? undefined : suggestions.breakfast,
@@ -324,7 +341,21 @@ export function MealPlanner() {
             <span className="text-2xl leading-none">🍛</span>
             <span className="text-xl font-black text-gray-900 tracking-tight">MealMate</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => { setShowMyList((p) => !p); setShowSettings(false); }}
+              className={`relative flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${
+                showMyList ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+              }`}
+            >
+              <ListPlus className="w-3.5 h-3.5" />
+              My List
+              {(profile.customDishes ?? []).length > 0 && (
+                <span className={`text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center ${showMyList ? 'bg-white/30 text-white' : 'bg-orange-500 text-white'}`}>
+                  {(profile.customDishes ?? []).length}
+                </span>
+              )}
+            </button>
             <Link
               href="/history"
               className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors"
@@ -340,12 +371,21 @@ export function MealPlanner() {
               Profile
             </Link>
             <button
-              onClick={() => setShowSettings((p) => !p)}
+              onClick={() => { setShowSettings((p) => !p); setShowMyList(false); }}
               className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors"
             >
               <Settings className="w-3.5 h-3.5" />
               Settings
             </button>
+            {session && (
+              <button
+                onClick={() => { import('next-auth/react').then(({ signOut }) => signOut({ callbackUrl: '/login' })); }}
+                className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-red-500 px-2 py-1.5 rounded-full hover:bg-red-50 transition-colors"
+                title="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
         {/* Mode tabs */}
@@ -533,6 +573,160 @@ export function MealPlanner() {
       {/* ── MAIN CONTENT ─────────────────────────────────────────────────── */}
       <main className="max-w-2xl mx-auto px-4 pt-4 pb-6 space-y-3">
 
+        {/* ── MY LIST PANEL ────────────────────────────────────────────────── */}
+        {showMyList && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 relative animate-fade-in">
+            <button onClick={() => setShowMyList(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+              <X className="w-4 h-4" />
+            </button>
+            <h2 className="text-sm font-black text-gray-700 uppercase tracking-widest mb-1">My Dish List</h2>
+            <p className="text-xs text-gray-400 mb-4">The AI picks these up and recommends them intermittently across your meal plan.</p>
+
+            {/* Existing dishes */}
+            {(profile.customDishes ?? []).length === 0 && !addingDish && (
+              <p className="text-xs text-gray-400 text-center py-3">No dishes yet — add your favourites below.</p>
+            )}
+            <div className="space-y-3 mb-4">
+              {(profile.customDishes ?? []).map((dish: CustomDish) => (
+                <div key={dish.id} className="bg-gray-50 rounded-xl border border-gray-100 p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-800">{dish.name}</p>
+                      {dish.description && <p className="text-xs text-gray-500 mt-0.5 leading-snug">{dish.description}</p>}
+                    </div>
+                    <button
+                      onClick={() => setProfile((p) => ({ ...p, customDishes: (p.customDishes ?? []).filter((d) => d.id !== dish.id) }))}
+                      className="text-gray-300 hover:text-red-400 transition-colors flex-shrink-0 mt-0.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Meal type selector */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mr-0.5">For:</span>
+                    {(['breakfast', 'lunch', 'dinner'] as MealType[]).map((mt) => {
+                      const checked = dish.mealTypes.length === 0 || dish.mealTypes.includes(mt);
+                      const emoji = mt === 'breakfast' ? '🌅' : mt === 'lunch' ? '☀️' : '🌙';
+                      const label = mt.charAt(0).toUpperCase() + mt.slice(1);
+                      return (
+                        <button
+                          key={mt}
+                          onClick={() => {
+                            setProfile((p) => {
+                              const current = dish.mealTypes.length === 0
+                                ? (['breakfast', 'lunch', 'dinner'] as MealType[])
+                                : [...dish.mealTypes];
+                              const next = current.includes(mt)
+                                ? current.filter((t) => t !== mt)
+                                : [...current, mt];
+                              const updated = (p.customDishes ?? []).map((d) =>
+                                d.id === dish.id
+                                  ? { ...d, mealTypes: next.length === 3 ? [] : next }
+                                  : d,
+                              );
+                              return { ...p, customDishes: updated };
+                            });
+                          }}
+                          className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg transition-all ${
+                            checked
+                              ? 'bg-orange-100 text-orange-600 border border-orange-200'
+                              : 'bg-white text-gray-400 border border-gray-200 hover:border-orange-200'
+                          }`}
+                        >
+                          {emoji} {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Feedback buttons */}
+                  <div className="flex items-center gap-1.5">
+                    {([
+                      { key: 'like' as const, icon: Heart, label: 'Love it', active: 'bg-pink-100 text-pink-600 border-pink-200', idle: 'hover:border-pink-200 hover:text-pink-400' },
+                      { key: 'more' as const, icon: ThumbsUp, label: 'More', active: 'bg-green-100 text-green-600 border-green-200', idle: 'hover:border-green-200 hover:text-green-500' },
+                      { key: 'less' as const, icon: ThumbsDown, label: 'Less', active: 'bg-red-100 text-red-500 border-red-200', idle: 'hover:border-red-200 hover:text-red-400' },
+                    ]).map(({ key, icon: Icon, label, active, idle }) => (
+                      <button
+                        key={key}
+                        onClick={() => setProfile((p) => ({
+                          ...p,
+                          customDishes: (p.customDishes ?? []).map((d) =>
+                            d.id === dish.id ? { ...d, feedback: d.feedback === key ? null : key } : d,
+                          ),
+                        }))}
+                        className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border transition-all ${
+                          dish.feedback === key
+                            ? active
+                            : `bg-white text-gray-400 border-gray-100 ${idle}`
+                        }`}
+                      >
+                        <Icon className="w-3 h-3" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Add dish form */}
+            {addingDish ? (
+              <div className="space-y-2 border-t border-gray-100 pt-3">
+                <input
+                  autoFocus
+                  type="text"
+                  value={newDishName}
+                  onChange={(e) => setNewDishName(e.target.value)}
+                  placeholder="Dish name (e.g. Palak Paneer)"
+                  className="w-full text-sm px-3 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-orange-300"
+                />
+                <textarea
+                  value={newDishDesc}
+                  onChange={(e) => setNewDishDesc(e.target.value)}
+                  placeholder="Optional: how you like it, key ingredients, special style… (e.g. My mum's recipe — extra ginger, no cream)"
+                  rows={2}
+                  className="w-full text-sm text-gray-700 bg-white border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-orange-300 resize-none placeholder:text-gray-400"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (!newDishName.trim()) return;
+                      const dish: CustomDish = {
+                        id: `dish-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        name: newDishName.trim(),
+                        description: newDishDesc.trim(),
+                        feedback: null,
+                        mealTypes: [],
+                      };
+                      setProfile((p) => ({ ...p, customDishes: [...(p.customDishes ?? []), dish] }));
+                      setNewDishName(''); setNewDishDesc(''); setAddingDish(false);
+                    }}
+                    disabled={!newDishName.trim()}
+                    className="flex-1 text-xs font-bold py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white rounded-xl transition-colors"
+                  >
+                    Add dish
+                  </button>
+                  <button
+                    onClick={() => { setAddingDish(false); setNewDishName(''); setNewDishDesc(''); }}
+                    className="text-xs font-bold py-2 px-3 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAddingDish(true)}
+                className="w-full flex items-center justify-center gap-1.5 text-xs font-bold text-orange-500 hover:text-orange-600 py-2 border border-dashed border-orange-200 hover:border-orange-400 rounded-xl transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add a dish
+              </button>
+            )}
+          </div>
+        )}
+
         {/* ── WEEK / FORTNIGHT MODE ──────────────────────────────────────────── */}
         {planMode !== 'today' && (
           <WeekPlanner
@@ -556,14 +750,12 @@ export function MealPlanner() {
                   skipped={skipped[mt]}
                   customNotes={customNotes[mt]}
                   servings={profile.servings}
-                  customDishes={profile.customDishes ?? []}
                   onHealthChange={(v) => updatePref(mt, 'health', v)}
                   onComplexityChange={(v) => updatePref(mt, 'complexity', v)}
                   onDietTypeChange={(d) => updateMealDiet(mt, d)}
                   onSkipToggle={() => toggleSkip(mt)}
                   onCustomNotesChange={(v) => setCustomNotes((n) => ({ ...n, [mt]: v }))}
                   onServingsChange={(v) => setProfile((p) => ({ ...p, servings: v }))}
-                  onCustomDishesChange={(dishes) => setProfile((p) => ({ ...p, customDishes: dishes }))}
                 />
               ))}
             </div>
